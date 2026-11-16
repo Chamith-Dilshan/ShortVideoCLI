@@ -30,3 +30,28 @@ to support other video genres.
 
 ```bash
 uv sync
+
+Step 1 — Install dependencies
+uv sync
+
+
+Step 2 — Create the migration directory
+
+Only do this if migrations/ doesn't already exist:
+uv run alembic init migrations
+
+
+Replace its generated env.py with the code above.
+
+Step 3 — Generate the initial migration
+uv run alembic revision --autogenerate -m "initial database schema"
+
+
+Step 4 — Create the database tables
+uv run alembic upgrade head
+
+
+Step 5 — Verify everything
+uv run shortvideocli status
+uv run shortvideocli db-check
+uv run pytest

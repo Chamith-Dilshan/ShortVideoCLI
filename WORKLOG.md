@@ -2,40 +2,46 @@
 
 ## Current phase
 
-T1 — Configuration and application settings
+T2 — Database foundation
 
 ## T0 — Project scaffold
 
-Status: Code updated for the ShortVideoCLI name.
-
-- [x] Project package renamed
-- [x] Console command renamed
-- [x] Package version moved to pyproject.toml as source of truth
-- [x] Removed manually maintained __version__
-- [X] User installation and CLI verification
+Status: Implemented; user verification pending.
 
 ## T1 — Configuration and logging
 
-Status: Implementation provided; user verification pending.
+Status: Implemented; logging fix supplied.
 
-- [x] Pydantic Settings configuration
-- [x] Environment variable prefix
-- [x] Secret settings
+- [x] Pydantic Settings
+- [x] Environment configuration
+- [x] Secret management
 - [x] Console logging
 - [x] Rotating file logging
-- [x] Initial configuration tests
-- [X] User runs tests and reviews behavior
+- [x] Logging verification command
 
-## Known limitations
+## T2 — Database foundation
 
-- No database implementation yet.
-- No external API integrations yet.
-- No video-processing functionality yet.
-- No viral-moment detection yet.
-- No audio downloading functionality yet.
+Status: Implementation supplied; user verification pending.
+
+- [x] SQLAlchemy engine and session management
+- [x] Shared database model base
+- [x] Project model
+- [x] Video source model
+- [x] Investigation model
+- [x] Candidate moment model
+- [x] Clip model
+- [x] Asset licensing model
+- [x] Human review model
+- [x] Alembic migration configuration
+- [x] Database connectivity command
+- [x] Initial database tests
+- [ ] Generate initial migration
+- [ ] Apply migration
+- [ ] Run tests
+- [ ] Review database schema
 
 ## Next task
 
-T2 — Application foundation and database design.
+T3 — Project and video-source management.
 
-Do not begin T2 until T1 has been reviewed and approved.
+Wait for approval before starting T3.

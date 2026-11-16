@@ -1,12 +1,15 @@
 """Command-line interface for ShortVideoCLI."""
 
+import asyncio
 import logging
 from importlib.metadata import PackageNotFoundError, version
 from typing import Annotated
 
 import typer
+from sqlalchemy import text
 
 from shortvideocli.config import get_settings
+from shortvideocli.database import get_engine
 from shortvideocli.logging_config import setup_logging
 
 app = typer.Typer(
@@ -63,6 +66,24 @@ def status() -> None:
     typer.echo(f"Environment: {settings.app_env}")
     typer.echo(f"Log level: {settings.log_level}")
     typer.echo(f"Log file: {settings.log_file.resolve()}")
+
+
+@app.command("db-check")
+def database_check() -> None:
+    """Check whether the asynchronous database connection works."""
+
+    async def check() -> None:
+        async with get_engine().connect() as connection:
+            await connection.execute(text("SELECT 1"))
+
+    try:
+        asyncio.run(check())
+        logger.info("Async database connection successful")
+        typer.echo("Database connection: OK")
+    except Exception:
+        logger.exception("Async database connection failed")
+        typer.echo("Database connection: FAILED", err=True)
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

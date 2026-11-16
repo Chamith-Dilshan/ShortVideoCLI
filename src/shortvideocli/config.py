@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     log_file: Path = Path("logs/app.log")
 
     # Database
-    database_url: str = "sqlite:///shortvideocli.db"
+    database_url: str = "sqlite+aiosqlite:///shortvideocli.db"
 
     # External API credentials
     youtube_api_key: SecretStr | None = None
