@@ -300,15 +300,19 @@ def workflow_resume(
         ...,
         help="ID of the workflow run to resume.",
     ),
+    file: str = typer.Argument(
+        ...,
+        help="YAML workflow file containing the corrected inputs.",
+    ),
 ) -> None:
-    """Resume a specific workflow run from its first incomplete step."""
+    """Refresh incomplete step inputs and resume a workflow run."""
 
     from rich.console import Console
 
     console = Console()
 
     try:
-        results = run_async(resume_workflow_run(run_id))
+        results = run_async(resume_workflow_run(run_id, file))
 
         for result in results:
             console.print(f"[green]✓[/green] {result}")

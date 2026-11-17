@@ -324,8 +324,19 @@ async def run_workflow_file(path: str | Path) -> list[str]:
     ]
 
 
-async def resume_workflow_run(run_id: str) -> list[str]:
-    """Resume an existing workflow run from its first incomplete step."""
+async def resume_workflow_run(
+    run_id: str,
+    path: str | Path,
+) -> list[str]:
+    """Refresh incomplete step inputs and resume an existing workflow run."""
+
+    workflow = _load_workflow(path)
+
+    await _refresh_incomplete_step_inputs(
+        get_session_factory(),
+        run_id,
+        workflow,
+    )
 
     try:
         await execute_workflow_run(
@@ -335,13 +346,63 @@ async def resume_workflow_run(run_id: str) -> list[str]:
         )
     except WorkflowStepError as exc:
         raise RuntimeError(
-            f"{exc}\n"
-            f"Workflow run ID: {run_id}\n"
-            f"You can retry this run after correcting the problem."
+            f"{exc}\nWorkflow run ID: {run_id}\nCorrect the YAML inputs and resume this run again."
         ) from exc
 
     messages = await _read_run_results(run_id)
+
     return [
         f"Resumed workflow run: {run_id}",
         *messages,
     ]
+
+
+async def _refresh_incomplete_step_inputs(
+    session_factory: Any,
+    run_id: str,
+    workflow: dict[str, Any],
+) -> None:
+    """Refresh incomplete step inputs without modifying completed steps."""
+
+    from shortvideocli.models import WorkflowRun
+
+    specifications = _build_step_specs(workflow)
+    new_specs = {spec.step_key: spec for spec in specifications}
+
+    async with session_factory() as session, session.begin():
+        run = await session.get(WorkflowRun, run_id)
+
+        if run is None:
+            raise ValueError(f"Workflow run not found: {run_id}")
+
+        if run.workflow_name != workflow["name"].strip():
+            raise ValueError("Workflow name does not match the saved run.")
+
+        if run.workflow_version != str(workflow.get("version", "1")):
+            raise ValueError("Workflow version does not match the saved run.")
+
+        result = await session.execute(
+            select(WorkflowStep)
+            .where(WorkflowStep.workflow_run_id == run_id)
+            .order_by(WorkflowStep.position)
+        )
+        saved_steps = list(result.scalars().all())
+
+        if {step.step_key for step in saved_steps} != set(new_specs):
+            raise ValueError(
+                "Workflow step structure has changed. "
+                "Resume requires the same step IDs and structure."
+            )
+
+        for saved_step in saved_steps:
+            spec = new_specs[saved_step.step_key]
+
+            if saved_step.step_type != spec.step_type:
+                raise ValueError(f"Action type changed for step '{saved_step.step_key}'.")
+
+            if saved_step.status == "completed":
+                continue
+
+            saved_step.input_data = dict(spec.input_data)
+
+        run.definition_hash = _definition_hash(workflow)
