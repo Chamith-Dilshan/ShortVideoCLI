@@ -32,7 +32,8 @@ logger = logging.getLogger("shortvideocli")
 app = typer.Typer(
     name="shortvideocli",
     help="Discover, investigate, and prepare compelling short-form video clips.",
-    no_args_is_help=True,
+    no_args_is_help=False,
+    invoke_without_command=True,
 )
 
 project_app = typer.Typer(
@@ -72,16 +73,25 @@ def version_callback(value: bool) -> None:
 @app.callback()
 def main(ctx: typer.Context) -> None:
     """Start ShortVideoCLI or run a specific command."""
+
     settings = get_settings()
     log_path = setup_logging(settings)
 
     logger.info("ShortVideoCLI started in %s mode", settings.app_env)
     logger.debug("Application log file: %s", log_path)
 
+    # No command means the user wants the interactive application.
     if ctx.invoked_subcommand is None:
         from shortvideocli.interactive import run_interactive
 
-        run_interactive()
+        try:
+            run_interactive()
+        except KeyboardInterrupt:
+            typer.echo("\nShortVideoCLI interrupted.")
+        finally:
+            from shortvideocli.database import close_database
+
+            run_async(close_database())
 
 
 @app.command()
