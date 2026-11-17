@@ -9,6 +9,8 @@ dependencies = [
     "alembic>=1.20.1",
     "pydantic>=2.14.3",
     "pydantic-settings>=2.16.3",
+    "pyyaml>=6.0.3",
+    "rich>=15.0.0",
     "sqlalchemy[asyncio]>=2.1.8", # required asyncio dependencies (including greenlet in current versions). Starting
     # with SQLAlchemy 2.0, the asyncio dependencies are no longer installed by default.
     "typer>=0.29.1",

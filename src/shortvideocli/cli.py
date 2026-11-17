@@ -70,23 +70,18 @@ def version_callback(value: bool) -> None:
 
 
 @app.callback()
-def main(
-    version_option: Annotated[
-        bool,
-        typer.Option(
-            "--version",
-            help="Show the application version and exit.",
-            callback=version_callback,
-            is_eager=True,
-        ),
-    ] = False,
-) -> None:
-    """Initialize application configuration and logging."""
+def main(ctx: typer.Context) -> None:
+    """Start ShortVideoCLI or run a specific command."""
     settings = get_settings()
     log_path = setup_logging(settings)
 
     logger.info("ShortVideoCLI started in %s mode", settings.app_env)
     logger.debug("Application log file: %s", log_path)
+
+    if ctx.invoked_subcommand is None:
+        from shortvideocli.interactive import run_interactive
+
+        run_interactive()
 
 
 @app.command()
@@ -245,6 +240,41 @@ def list_sources(
         typer.echo(
             f"{source.id} | {source.platform} | {source.title or 'Untitled'} | {source.source_url}"
         )
+
+
+workflow_app = typer.Typer(
+    name="workflow",
+    help="Run automated ShortVideoCLI workflows.",
+)
+
+app.add_typer(workflow_app, name="workflow")
+
+
+@workflow_app.command("run")
+def workflow_run(
+    file: str = typer.Argument(
+        ...,
+        help="Path to a YAML workflow file.",
+    ),
+) -> None:
+    """Execute a YAML automation workflow."""
+
+    import asyncio
+
+    from rich.console import Console
+
+    from shortvideocli.workflows import run_workflow_file
+
+    console = Console()
+
+    try:
+        results = asyncio.run(run_workflow_file(file))
+        for result in results:
+            console.print(f"[green]✓[/green] {result}")
+        console.print("[bold green]Workflow completed.[/bold green]")
+    except (ValueError, OSError) as exc:
+        console.print(f"[red]Workflow failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
 
 if __name__ == "__main__":

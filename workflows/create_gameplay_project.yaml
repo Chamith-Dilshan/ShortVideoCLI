@@ -1,0 +1,16 @@
+name: Create a gameplay research project
+
+steps:
+  - id: gameplay
+    action: project.create
+    name: Gameplay Highlights
+    description: Gameplay video research and highlight discovery
+
+  - action: source.add
+    project: gameplay
+    platform: youtube
+    url: https://youtu.be/_SkCUBA7X08?si=zlo7qSIHShXEqGW0
+    title: First Light
+    rights_note: >
+      Research source. Confirm permission and applicable usage rights
+      before downloading, editing, or publishing any material.
