@@ -12,7 +12,7 @@ def test_settings_defaults() -> None:
 
     assert settings.app_env == "development"
     assert settings.log_level == "INFO"
-    assert settings.database_url == "sqlite:///shortvideocli.db"
+    assert settings.database_url == "sqlite+aiosqlite:///shortvideocli.db"
 
 
 def test_settings_read_environment_variables(

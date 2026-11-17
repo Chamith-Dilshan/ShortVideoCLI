@@ -40,8 +40,19 @@ Status: Implementation supplied; user verification pending.
 - [ ] Run tests
 - [ ] Review database schema
 
-## Next task
+## T3 — Project and video-source management
 
-T3 — Project and video-source management.
+Status: Implementation supplied; user verification pending.
 
-Wait for approval before starting T3.
+- [x] Project creation service
+- [x] Project listing service
+- [x] Video source registration
+- [x] Video source listing
+- [x] Source URL validation
+- [x] Required rights note
+- [x] Duplicate source protection
+- [x] CLI project commands
+- [x] CLI source commands
+- [x] Initial service tests
+- [ ] Run tests
+- [ ] Test CLI workflows manually
