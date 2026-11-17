@@ -1,4 +1,5 @@
 name: Create a gameplay research project
+version: "1"
 
 steps:
   - id: gameplay
@@ -9,7 +10,7 @@ steps:
   - action: source.add
     project: gameplay
     platform: youtube
-    url: https://youtu.be/_SkCUBA7X08?si=zlo7qSIHShXEqGW0
+    url: "https://youtu.be/_SkCUBA7X08?si=zlo7qSIHShXEqGW0"
     title: First Light
     rights_note: >
       Research source. Confirm permission and applicable usage rights

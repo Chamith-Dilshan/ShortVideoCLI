@@ -24,6 +24,10 @@ from shortvideocli.services.sources import (
 from shortvideocli.services.sources import (
     list_sources as list_sources_service,
 )
+from shortvideocli.workflows import (
+    resume_workflow_run,
+    run_workflow_file,
+)
 
 T = TypeVar("T")
 
@@ -257,7 +261,7 @@ def list_sources(
 
 workflow_app = typer.Typer(
     name="workflow",
-    help="Run automated ShortVideoCLI workflows.",
+    help="Run and manage automated ShortVideoCLI workflows.",
 )
 
 app.add_typer(workflow_app, name="workflow")
@@ -270,23 +274,50 @@ def workflow_run(
         help="Path to a YAML workflow file.",
     ),
 ) -> None:
-    """Execute a YAML automation workflow."""
-
-    import asyncio
+    """Start a workflow or resume its matching incomplete run."""
 
     from rich.console import Console
-
-    from shortvideocli.workflows import run_workflow_file
 
     console = Console()
 
     try:
-        results = asyncio.run(run_workflow_file(file))
+        results = run_async(run_workflow_file(file))
+
         for result in results:
             console.print(f"[green]✓[/green] {result}")
+
         console.print("[bold green]Workflow completed.[/bold green]")
-    except (ValueError, OSError) as exc:
+
+    except (ValueError, OSError, RuntimeError) as exc:
+        logger.exception("Workflow execution failed")
         console.print(f"[red]Workflow failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+@workflow_app.command("resume")
+def workflow_resume(
+    run_id: str = typer.Argument(
+        ...,
+        help="ID of the workflow run to resume.",
+    ),
+) -> None:
+    """Resume a specific workflow run from its first incomplete step."""
+
+    from rich.console import Console
+
+    console = Console()
+
+    try:
+        results = run_async(resume_workflow_run(run_id))
+
+        for result in results:
+            console.print(f"[green]✓[/green] {result}")
+
+        console.print("[bold green]Workflow completed.[/bold green]")
+
+    except (ValueError, OSError, RuntimeError) as exc:
+        logger.exception("Workflow resume failed")
+        console.print(f"[red]Workflow resume failed: {exc}[/red]")
         raise typer.Exit(code=1) from exc
 
 

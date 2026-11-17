@@ -55,3 +55,13 @@ Step 5 — Verify everything
 uv run shortvideocli status
 uv run shortvideocli db-check
 uv run pytest
+```
+
+One important design decision: each milestone gets its own database session and transaction. This prevents SQLAlchemy's
+automatic transaction handling from accidentally mixing queries from one milestone with another.
+
+Situation What happens on resume
+Step completed Skipped
+Step failed Retried
+Process crashed while step was running Retried
+Earlier steps completed Their outputs remain available
