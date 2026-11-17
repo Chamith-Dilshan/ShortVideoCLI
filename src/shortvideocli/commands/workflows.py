@@ -4,8 +4,14 @@ import logging
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from shortvideocli.commands.utils import run_async
+from shortvideocli.database import get_session_factory
+from shortvideocli.workflow_queries import (
+    get_workflow_run_details,
+    list_workflow_runs,
+)
 from shortvideocli.workflows import (
     resume_workflow_run,
     run_workflow_file,
@@ -68,4 +74,113 @@ def workflow_resume(
     except (ValueError, OSError, RuntimeError) as exc:
         logger.exception("Workflow resume failed")
         console.print(f"[red]Workflow resume failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+@workflow_app.command("history")
+def workflow_history(
+    limit: int = typer.Option(
+        20,
+        "--limit",
+        "-n",
+        min=1,
+        max=100,
+        help="Maximum number of workflow runs to display.",
+    ),
+) -> None:
+    """List recent workflow runs."""
+    try:
+        runs = run_async(
+            list_workflow_runs(
+                get_session_factory(),
+                limit=limit,
+            )
+        )
+
+        if not runs:
+            console.print("No workflow runs found.")
+            return
+
+        table = Table(title="Workflow History")
+        table.add_column("Workflow")
+        table.add_column("Version")
+        table.add_column("Run ID")
+        table.add_column("Status")
+        table.add_column("Created")
+
+        for run in runs:
+            created = run.created_at.strftime("%Y-%m-%d %H:%M:%S") if run.created_at else "Unknown"
+
+            table.add_row(
+                run.workflow_name,
+                run.workflow_version,
+                run.id,
+                run.status,
+                created,
+            )
+
+        console.print(table)
+
+    except (ValueError, OSError) as exc:
+        logger.exception("Could not retrieve workflow history.")
+        console.print(f"[red]Could not retrieve workflow history:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+@workflow_app.command("inspect")
+def workflow_inspect(
+    run_id: str = typer.Argument(
+        ...,
+        help="ID of the workflow run to inspect.",
+    ),
+) -> None:
+    """Inspect a workflow run and its milestone progress."""
+    try:
+        result = run_async(
+            get_workflow_run_details(
+                get_session_factory(),
+                run_id=run_id,
+            )
+        )
+
+        if result is None:
+            console.print(f"[red]Workflow run not found:[/red] {run_id}")
+            raise typer.Exit(code=1)
+
+        run, steps = result
+
+        console.print(f"\n[bold]Workflow:[/bold] {run.workflow_name}")
+        console.print(f"[bold]Version:[/bold] {run.workflow_version}")
+        console.print(f"[bold]Run ID:[/bold] {run.id}")
+        console.print(f"[bold]Status:[/bold] {run.status}")
+        console.print(f"[bold]Created:[/bold] {run.created_at}")
+        console.print(f"[bold]Started:[/bold] {run.started_at or 'Not started'}")
+        console.print(f"[bold]Completed:[/bold] {run.completed_at or 'Not completed'}")
+
+        if run.error_message:
+            console.print(f"[red]Run error:[/red] {run.error_message}")
+
+        table = Table(title="Workflow Milestones")
+        table.add_column("Position", justify="right")
+        table.add_column("Step")
+        table.add_column("Type")
+        table.add_column("Status")
+        table.add_column("Attempts", justify="right")
+        table.add_column("Error")
+
+        for step in steps:
+            table.add_row(
+                str(step.position),
+                step.step_key,
+                step.step_type,
+                step.status,
+                str(step.attempt_count),
+                step.error_message or "",
+            )
+
+        console.print(table)
+
+    except (ValueError, OSError) as exc:
+        logger.exception("Could not inspect workflow run.")
+        console.print(f"[red]Could not inspect workflow run:[/red] {exc}")
         raise typer.Exit(code=1) from exc
