@@ -13,7 +13,9 @@ from shortvideocli.workflow_queries import (
     list_workflow_runs,
 )
 from shortvideocli.workflows import (
+    restart_workflow_run,
     resume_workflow_run,
+    retry_workflow_run,
     run_workflow_file,
 )
 
@@ -183,4 +185,48 @@ def workflow_inspect(
     except (ValueError, OSError) as exc:
         logger.exception("Could not inspect workflow run.")
         console.print(f"[red]Could not inspect workflow run:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+
+@workflow_app.command("retry")
+def workflow_retry(
+    run_id: str = typer.Argument(
+        ...,
+        help="ID of the failed workflow run to retry.",
+    ),
+) -> None:
+    """Retry a failed workflow using its saved inputs."""
+    try:
+        results = run_async(retry_workflow_run(run_id))
+
+        for result in results:
+            console.print(f"[green]✓[/green] {result}")
+
+        console.print("[bold green]Workflow retry completed.[/bold green]")
+
+    except (ValueError, OSError, RuntimeError) as exc:
+        logger.exception("Workflow retry failed")
+        console.print(f"[red]Workflow retry failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+@workflow_app.command("restart")
+def workflow_restart(
+    run_id: str = typer.Argument(
+        ...,
+        help="ID of the failed workflow run to restart.",
+    ),
+) -> None:
+    """Create a new recovery run from a failed workflow."""
+    try:
+        results = run_async(restart_workflow_run(run_id))
+
+        for result in results:
+            console.print(f"[green]✓[/green] {result}")
+
+        console.print("[bold green]Workflow restart completed.[/bold green]")
+
+    except (ValueError, OSError, RuntimeError) as exc:
+        logger.exception("Workflow restart failed")
+        console.print(f"[red]Workflow restart failed: {exc}[/red]")
         raise typer.Exit(code=1) from exc

@@ -8,6 +8,7 @@ from typing import Any
 
 import yaml
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from shortvideocli.database import get_session_factory
 from shortvideocli.models import WorkflowRun, WorkflowStep
@@ -237,10 +238,15 @@ def _definition_hash(workflow: dict[str, Any]) -> str:
     return hashlib.sha256(canonical_yaml.encode("utf-8")).hexdigest()
 
 
-async def _read_run_results(run_id: str) -> list[str]:
+async def _read_run_results(
+    run_id: str,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> list[str]:
     """Read the saved messages from a workflow run's completed steps."""
 
-    async with get_session_factory()() as session:
+    factory = session_factory or get_session_factory()
+
+    async with factory() as session:
         result = await session.execute(
             select(WorkflowStep)
             .where(WorkflowStep.workflow_run_id == run_id)
@@ -249,6 +255,7 @@ async def _read_run_results(run_id: str) -> list[str]:
         steps = result.scalars().all()
 
         messages: list[str] = []
+
         for step in steps:
             if step.status != "completed":
                 continue
@@ -406,3 +413,182 @@ async def _refresh_incomplete_step_inputs(
             saved_step.input_data = dict(spec.input_data)
 
         run.definition_hash = _definition_hash(workflow)
+
+
+async def retry_workflow_run(
+    run_id: str,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> list[str]:
+    """Retry a failed workflow using its saved milestone inputs.
+
+    Completed milestones are skipped by the workflow engine. The failed
+    milestone and any subsequent pending milestones are executed again.
+
+    Args:
+        run_id: ID of the failed workflow run.
+        session_factory: Optional session factory, primarily for testing.
+
+    Returns:
+        A list of workflow execution messages.
+
+    Raises:
+        ValueError: If the run does not exist or is not failed.
+        RuntimeError: If a milestone fails again.
+    """
+    factory = session_factory or get_session_factory()
+
+    async with factory() as session:
+        run = await session.get(WorkflowRun, run_id)
+
+        if run is None:
+            raise ValueError(f"Workflow run not found: {run_id}")
+
+        if run.status != "failed":
+            raise ValueError(
+                f"Cannot retry workflow with status '{run.status}'. "
+                "Only failed workflows can be retried."
+            )
+
+        failed_step = await session.scalar(
+            select(WorkflowStep).where(
+                WorkflowStep.workflow_run_id == run_id,
+                WorkflowStep.status == "failed",
+            )
+        )
+
+        if failed_step is None:
+            raise ValueError("The workflow is marked as failed but has no failed milestone.")
+
+    try:
+        await execute_workflow_run(
+            factory,
+            run_id=run_id,
+            handlers=_get_handlers(),
+        )
+    except WorkflowStepError as exc:
+        raise RuntimeError(
+            f"{exc}\nWorkflow run ID: {run_id}\n"
+            "Correct the underlying problem and retry this run again."
+        ) from exc
+
+    messages = await _read_run_results(run_id, factory)
+
+    return [
+        f"Retried and completed workflow run: {run_id}",
+        *messages,
+    ]
+
+
+async def restart_workflow_run(
+    run_id: str,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> list[str]:
+    """Create a new recovery run from a failed workflow.
+
+    Completed milestones are copied as completed checkpoints. Failed and
+    pending milestones are reset to pending and will execute in the new run.
+
+    The original workflow run and its database records are preserved.
+
+    Args:
+        run_id: ID of the failed workflow run to restart.
+        session_factory: Optional session factory, primarily for testing.
+
+    Returns:
+        A list of messages from the new workflow run.
+
+    Raises:
+        ValueError: If the original run is missing, is not failed, or has
+            no failed milestone.
+        RuntimeError: If a milestone fails in the new run.
+    """
+    factory = session_factory or get_session_factory()
+
+    async with factory() as session:
+        original_run = await session.get(WorkflowRun, run_id)
+
+        if original_run is None:
+            raise ValueError(f"Workflow run not found: {run_id}")
+
+        if original_run.status != "failed":
+            raise ValueError(
+                f"Cannot restart workflow with status '{original_run.status}'. "
+                "Only failed workflows can be restarted."
+            )
+
+        result = await session.execute(
+            select(WorkflowStep)
+            .where(WorkflowStep.workflow_run_id == run_id)
+            .order_by(WorkflowStep.position)
+        )
+        original_steps = list(result.scalars().all())
+
+        if not original_steps:
+            raise ValueError("Cannot restart a workflow with no milestones.")
+
+        if not any(step.status == "failed" for step in original_steps):
+            raise ValueError("The workflow is marked as failed but has no failed milestone.")
+
+        specifications = [
+            WorkflowStepSpec(
+                step_key=step.step_key,
+                step_type=step.step_type,
+                position=step.position,
+                input_data=dict(step.input_data),
+            )
+            for step in original_steps
+        ]
+
+        workflow_name = original_run.workflow_name
+        workflow_version = original_run.workflow_version
+        definition_hash = original_run.definition_hash
+
+        completed_outputs = {
+            step.step_key: dict(step.output_data)
+            for step in original_steps
+            if step.status == "completed"
+        }
+
+    # Create the new run and copy successful checkpoints in one transaction.
+    async with factory() as session, session.begin():
+        new_run = await create_workflow_run(
+            session,
+            workflow_name=workflow_name,
+            workflow_version=workflow_version,
+            definition_hash=definition_hash,
+            steps=specifications,
+        )
+
+        new_run_id = str(new_run.id)
+
+        result = await session.execute(
+            select(WorkflowStep).where(WorkflowStep.workflow_run_id == new_run_id)
+        )
+        new_steps = {step.step_key: step for step in result.scalars().all()}
+
+        for step_key, output_data in completed_outputs.items():
+            new_step = new_steps[step_key]
+            new_step.status = "completed"
+            new_step.output_data = output_data
+
+    try:
+        await execute_workflow_run(
+            factory,
+            run_id=new_run_id,
+            handlers=_get_handlers(),
+        )
+    except WorkflowStepError as exc:
+        raise RuntimeError(
+            f"{exc}\n"
+            f"New workflow run ID: {new_run_id}\n"
+            f"Original workflow run ID: {run_id}\n"
+            "Correct the underlying problem and retry the new run."
+        ) from exc
+
+    messages = await _read_run_results(new_run_id, factory)
+
+    return [
+        f"Created recovery run: {new_run_id}",
+        f"Original workflow run preserved: {run_id}",
+        *messages,
+    ]

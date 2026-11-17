@@ -65,3 +65,9 @@ Step completed Skipped
 Step failed Retried
 Process crashed while step was running Retried
 Earlier steps completed Their outputs remain available
+
+retry will use the failed run's saved inputs.
+
+resume RUN_ID FILE will continue to allow corrected YAML inputs.
+
+restart will create a separate run, preserving the original history and records.
