@@ -4,7 +4,10 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from shortvideocli.models import Base
-from shortvideocli.services.projects import create_project, list_projects
+from shortvideocli.services.projects import (
+    create_project,
+    list_projects,
+)
 from shortvideocli.services.sources import create_source, list_sources
 
 
@@ -103,3 +106,23 @@ async def test_source_requires_existing_project(test_session) -> None:
             source_url="https://www.youtube.com/watch?v=example",
             rights_note="I have permission to use this video.",
         )
+
+
+@pytest.mark.asyncio
+async def test_project_creation_rolls_back_with_transaction(
+    test_session,
+):
+    """A failed transaction must not leave a partially created project."""
+
+    with pytest.raises(RuntimeError):
+        async with test_session.begin():
+            await create_project(
+                test_session,
+                name="Temporary Project",
+            )
+
+            raise RuntimeError("Simulated milestone failure")
+
+    projects = await list_projects(test_session)
+
+    assert projects == []

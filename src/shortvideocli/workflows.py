@@ -66,11 +66,12 @@ async def run_workflow_file(path: str | Path) -> list[str]:
                 if not isinstance(name, str) or not name.strip():
                     raise ValueError(f"Step {index}: project.create requires a name.")
 
-                project = await create_project(
-                    session,
-                    name=name,
-                    description=step.get("description"),
-                )
+                async with session.begin():
+                    project = await create_project(
+                        session,
+                        name=name,
+                        description=step.get("description"),
+                    )
 
                 alias = step.get("id")
                 if alias is not None:
@@ -101,14 +102,15 @@ async def run_workflow_file(path: str | Path) -> list[str]:
                 if missing:
                     raise ValueError(f"Step {index}: source.add is missing: " + ", ".join(missing))
 
-                source = await create_source(
-                    session,
-                    project_id=project_id,
-                    platform=step["platform"],
-                    source_url=step["url"],
-                    rights_note=step["rights_note"],
-                    title=step.get("title"),
-                )
+                async with session.begin():
+                    source = await create_source(
+                        session,
+                        project_id=project_id,
+                        platform=step["platform"],
+                        source_url=step["url"],
+                        rights_note=step["rights_note"],
+                        title=step.get("title"),
+                    )
 
                 results.append(f"Step {index}: registered source '{source.source_url}'")
 

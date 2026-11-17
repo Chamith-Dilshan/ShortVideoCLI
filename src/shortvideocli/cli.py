@@ -127,7 +127,10 @@ def database_check() -> None:
 
 @project_app.command("create")
 def create_project(
-    name: Annotated[str, typer.Argument(help="Name of the new project.")],
+    name: Annotated[
+        str,
+        typer.Argument(help="Name of the new project."),
+    ],
     description: Annotated[
         str | None,
         typer.Option("--description", "-d", help="Optional project description."),
@@ -136,7 +139,7 @@ def create_project(
     """Create a new project."""
 
     async def operation():
-        async with get_session_factory()() as session:
+        async with get_session_factory()() as session, session.begin():
             return await create_project_service(
                 session,
                 name=name,
@@ -203,7 +206,7 @@ def add_source(
     """Register a video source under an existing project."""
 
     async def operation():
-        async with get_session_factory()() as session:
+        async with get_session_factory()() as session, session.begin():
             return await create_source_service(
                 session,
                 project_id=project_id,

@@ -1,4 +1,7 @@
-"""Business logic for project management."""
+"""Database operations for project management.
+
+Transaction boundaries are owned by the caller, not by this service.
+"""
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,49 +15,36 @@ async def create_project(
     name: str,
     description: str | None = None,
 ) -> Project:
-    """Create and persist a project.
+    """Create a project without committing the surrounding transaction."""
 
-    Args:
-        session: Active asynchronous database session.
-        name: Human-readable project name.
-        description: Optional project description.
+    clean_name = name.strip()
 
-    Returns:
-        The newly persisted project.
-
-    Raises:
-        ValueError: If the project name is empty.
-    """
-    normalized_name = name.strip()
-
-    if not normalized_name:
+    if not clean_name:
         raise ValueError("Project name cannot be empty.")
 
     project = Project(
-        name=normalized_name,
+        name=clean_name,
         description=description.strip() if description else None,
     )
 
     session.add(project)
-    await session.commit()
+    await session.flush()
     await session.refresh(project)
 
     return project
 
 
-async def list_projects(
-    session: AsyncSession,
-) -> list[Project]:
-    """Return all projects, newest first."""
-    statement = select(Project).order_by(Project.created_at.desc())
+async def list_projects(session: AsyncSession) -> list[Project]:
+    """Return projects ordered from newest to oldest."""
 
-    result = await session.scalars(statement)
-    return list(result.all())
+    result = await session.execute(select(Project).order_by(Project.created_at.desc()))
+    return list(result.scalars().all())
 
 
 async def get_project(
     session: AsyncSession,
     project_id: str,
 ) -> Project | None:
-    """Find a project by its UUID."""
+    """Find a project by its primary key."""
+
     return await session.get(Project, project_id)

@@ -8,6 +8,7 @@ from shortvideocli.models.moment import MomentCandidate
 from shortvideocli.models.project import Project
 from shortvideocli.models.review import ReviewDecision
 from shortvideocli.models.source import VideoSource
+from shortvideocli.models.workflow import WorkflowRun, WorkflowStep
 
 __all__ = [
     "Asset",
@@ -18,4 +19,6 @@ __all__ = [
     "Project",
     "ReviewDecision",
     "VideoSource",
+    "WorkflowRun",
+    "WorkflowStep",
 ]

@@ -113,6 +113,7 @@ def _create_project() -> None:
     """Prompt for and create a project."""
 
     name = console.input("[bold cyan]Project name:[/bold cyan] ").strip()
+
     if not name:
         console.print("[red]Project name cannot be empty.[/red]")
         return
@@ -120,7 +121,7 @@ def _create_project() -> None:
     description = console.input("[bold cyan]Description (optional):[/bold cyan] ").strip()
 
     async def operation():
-        async with get_session_factory()() as session:
+        async with get_session_factory()() as session, session.begin():
             return await create_project(
                 session,
                 name=name,
@@ -131,6 +132,7 @@ def _create_project() -> None:
         project = _run(operation())
         console.print(f"[green]Created project:[/green] {project.name}")
         console.print(f"[dim]Project ID: {project.id}[/dim]")
+
     except ValueError as exc:
         console.print(f"[red]Error: {exc}[/red]")
 
@@ -169,7 +171,7 @@ def _add_source() -> None:
     rights_note = console.input("[bold cyan]Rights / permission note:[/bold cyan] ").strip()
 
     async def operation():
-        async with get_session_factory()() as session:
+        async with get_session_factory()() as session, session.begin():
             return await create_source(
                 session,
                 project_id=project.id,
@@ -226,6 +228,7 @@ def _list_sources() -> None:
         )
 
     console.print(table)
+
 
 def run_interactive() -> None:
     """Start the application with one persistent asynchronous event loop."""
