@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import select, update
@@ -599,3 +599,69 @@ async def recover_interrupted_workflow_run(
         interrupted_steps = step_result.rowcount or 0
 
     return interrupted_steps
+
+
+async def find_stale_workflow_runs(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    timeout_multiplier: int = 3,
+) -> list[str]:
+    """Find running workflow runs with expired heartbeats."""
+    if timeout_multiplier < 1:
+        raise ValueError("Timeout multiplier must be at least one.")
+
+    now = datetime.now(UTC)
+    stale_run_ids: list[str] = []
+
+    async with session_factory() as session:
+        result = await session.execute(
+            select(WorkflowRun).where(
+                WorkflowRun.status == "running",
+                WorkflowRun.last_heartbeat_at.is_not(None),
+                WorkflowRun.heartbeat_interval_seconds.is_not(None),
+                WorkflowRun.heartbeat_interval_seconds > 0,
+            )
+        )
+
+        for run in result.scalars().all():
+            heartbeat = run.last_heartbeat_at
+
+            # SQLite may return a naive datetime.
+            if heartbeat.tzinfo is None:
+                heartbeat = heartbeat.replace(tzinfo=UTC)
+
+            timeout_seconds = run.heartbeat_interval_seconds * timeout_multiplier
+
+            if (now - heartbeat).total_seconds() > timeout_seconds:
+                stale_run_ids.append(run.id)
+
+    return stale_run_ids
+
+
+async def recover_stale_workflow_runs(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    timeout_multiplier: int = 3,
+) -> list[str]:
+    """Recover workflow runs whose heartbeats have expired.
+
+    Existing completed steps remain intact. Recovery marks the interrupted
+    running steps and workflow run as failed, allowing the normal retry
+    mechanism to resume the workflow.
+
+    Returns:
+        IDs of the stale workflow runs submitted for recovery.
+    """
+    stale_run_ids = await find_stale_workflow_runs(
+        session_factory,
+        timeout_multiplier=timeout_multiplier,
+    )
+
+    for run_id in stale_run_ids:
+        await recover_interrupted_workflow_run(
+            session_factory,
+            run_id=run_id,
+            reason="Workflow heartbeat expired; recovered as interrupted.",
+        )
+
+    return stale_run_ids
