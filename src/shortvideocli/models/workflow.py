@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from shortvideocli.models.base import (
@@ -39,6 +39,18 @@ class WorkflowRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default="pending",
     )
     started_at: Mapped[datetime | None] = mapped_column(
+        nullable=True,
+    )
+    execution_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+    )
+    last_heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    heartbeat_interval_seconds: Mapped[int | None] = mapped_column(
+        Integer,
         nullable=True,
     )
     completed_at: Mapped[datetime | None] = mapped_column(

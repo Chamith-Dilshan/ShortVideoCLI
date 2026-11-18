@@ -8,6 +8,7 @@ from rich.table import Table
 
 from shortvideocli.commands.utils import run_async
 from shortvideocli.database import get_session_factory
+from shortvideocli.workflow_engine import recover_interrupted_workflow_run
 from shortvideocli.workflow_queries import (
     get_workflow_run_details,
     list_workflow_runs,
@@ -229,4 +230,68 @@ def workflow_restart(
     except (ValueError, OSError, RuntimeError) as exc:
         logger.exception("Workflow restart failed")
         console.print(f"[red]Workflow restart failed: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+@workflow_app.command("recover")
+def workflow_recover(
+    run_id: str = typer.Argument(
+        ...,
+        help="ID of the interrupted workflow run to recover.",
+    ),
+) -> None:
+    """Recover a workflow run left in the running state."""
+    try:
+        result = run_async(
+            get_workflow_run_details(
+                get_session_factory(),
+                run_id=run_id,
+            )
+        )
+
+        if result is None:
+            console.print(f"[red]Workflow run not found:[/red] {run_id}")
+            raise typer.Exit(code=1)
+
+        run, steps = result
+
+        if run.status != "running":
+            console.print(f"[red]Cannot recover workflow run.[/red] Current status: {run.status}")
+            raise typer.Exit(code=1)
+
+        console.print("\n[bold yellow]Warning: Workflow recovery[/bold yellow]")
+        console.print(
+            "This operation will mark the running workflow as failed "
+            "and mark any running milestones as failed."
+        )
+        console.print("Completed milestones and their saved outputs will be preserved.")
+        console.print(
+            "\n[bold red]Make sure the original workflow process "
+            "has completely stopped before continuing.[/bold red]"
+        )
+
+        confirmed = typer.confirm(
+            "\nDo you want to recover this workflow run?",
+            default=False,
+        )
+
+        if not confirmed:
+            console.print("[yellow]Workflow recovery cancelled.[/yellow]")
+            raise typer.Exit(code=0)
+
+        interrupted_count = run_async(
+            recover_interrupted_workflow_run(
+                get_session_factory(),
+                run_id=run_id,
+                reason="Workflow manually recovered after interruption.",
+            )
+        )
+
+        console.print("\n[green]Workflow recovery completed.[/green]")
+        console.print(f"Interrupted milestones marked as failed: {interrupted_count}")
+        console.print("\nYou can now resume the workflow using the resume command.")
+
+    except (ValueError, OSError, RuntimeError) as exc:
+        logger.exception("Workflow recovery failed")
+        console.print(f"[red]Workflow recovery failed: {exc}[/red]")
         raise typer.Exit(code=1) from exc
